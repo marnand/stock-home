@@ -1,0 +1,152 @@
+---
+
+## Prompt para Replit AI – Sistema de Controle de Estoque Doméstico
+
+Você é um **engenheiro de software full-stack** criando um **sistema web funcional**, pronto para rodar em ambiente Replit, com foco em **organização, escalabilidade e análise de dados**.
+
+Crie um **aplicativo web completo** para controle de estoque doméstico (itens de casa), não apenas uma interface estática.
+
+---
+
+## Stack Obrigatória (Replit-friendly)
+
+Use explicitamente:
+
+Utilize para o UI o shadcn ou invés do radix
+
+O projeto deve rodar com um único comando (`npm run dev` ou equivalente).
+
+---
+
+## Objetivo do Sistema
+
+Gerenciar itens domésticos (alimentos, limpeza, higiene e saúde) como um **estoque inteligente**, permitindo:
+
+* Saber o que existe
+* O que está acabando
+* O que precisa ser comprado
+* Quanto custa manter esse estoque
+* Servir de base para análises futuras de consumo e economia doméstica
+
+---
+
+## Modelo de Dados (Obrigatório)
+
+Crie um modelo de dados **bem normalizado** com, no mínimo, a entidade `Item`:
+
+```ts
+Item {
+  id: number
+  nome: string
+  marca: string
+  categoria: string
+  quantidadeAtual: number
+  quantidadeMinima: number
+  unidadeMedida: string
+
+  valorUnitario: number
+  dataUltimaCompra: Date
+
+  dataValidade?: Date
+
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Campos Derivados (não persistir)
+
+Calcular via backend:
+
+* `valorTotal = quantidadeAtual * valorUnitario`
+* `necessitaReposicao = quantidadeAtual <= quantidadeMinima`
+* `diasParaVencer`
+* `statusEstoque: 'OK' | 'ATENCAO' | 'CRITICO'`
+
+---
+
+## Backend – Requisitos
+
+* API REST clara (`/items`)
+* CRUD completo
+* Endpoint para **dashboard**
+
+  * Total de itens
+  * Itens em estoque crítico
+  * Itens próximos do vencimento
+  * Valor total do estoque
+* Separar:
+
+  * Rotas
+  * Controllers
+  * Serviços (regras de negócio)
+
+Não misturar regra de negócio com rotas.
+
+---
+
+## Frontend – Requisitos
+
+Criar páginas claras:
+
+1. **Dashboard**
+
+   * Cards de indicadores
+   * Lista de alertas
+2. **Lista de Itens**
+
+   * Tabela com filtros
+   * Destaque visual para itens críticos
+3. **Cadastro / Edição de Item**
+
+   * Formulário validado
+
+UX simples, funcional, mobile-first.
+
+---
+
+## Requisitos de Escalabilidade (Importante)
+
+Estruture o código pensando em futuras features:
+
+* Histórico de consumo
+* Relatórios mensais
+* Projeção de gastos
+* Economia doméstica
+* Multiusuário
+
+Mesmo que não implemente agora, **não dificulte isso no design atual**.
+
+---
+
+## Restrições Importantes
+
+* Não usar dados mockados
+* Não gerar apenas frontend
+* Não acoplar regras de negócio ao React
+* Não criar código excessivamente abstrato
+* Código deve ser legível e didático
+
+---
+
+## Entregáveis Esperados
+
+1. Estrutura de pastas
+2. Código funcional (frontend + backend)
+3. Script de inicialização
+4. Instruções claras de como rodar no Replit
+5. Comentários explicando decisões importantes
+
+---
+
+### Prioridade
+
+O foco é:
+
+1. **Funcionar**
+2. **Ser fácil de evoluir**
+3. **Ser tecnicamente correto**
+
+Evite overengineering, mas **não sacrifique arquitetura básica**.
+
+---
