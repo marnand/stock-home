@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+    # Descomente a linha abaixo se precisar de variáveis de ambiente
+    # env_file:
+    #   - .env
+    restart: unless-stopped
