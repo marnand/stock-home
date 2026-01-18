@@ -1,12 +1,15 @@
 import { Layout } from "@/components/layout";
 import { ItemDialog } from "@/components/item-dialog";
-import { useInventoryStore } from "@/lib/store";
+import { itemService } from "@/api/service/index.service";
+import { useQuery } from "@/api/hooks";
+import type { Item } from "@/api/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, TrendingDown, Package, DollarSign, Plus } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const chartData = [
   { name: 'Jan', value: 1200 },
@@ -19,13 +22,69 @@ const chartData = [
 ];
 
 export default function Dashboard() {
-  const { items, getTotalValue, getCriticalItems, getExpiringItems } = useInventoryStore();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
-  const totalValue = getTotalValue();
-  const criticalItems = getCriticalItems();
-  const expiringItems = getExpiringItems();
-  const totalItemsCount = items.reduce((acc, item) => acc + item.quantidadeAtual, 0);
+
+  const { data, isLoading } = useQuery(
+    ['items'],
+    () => itemService.getAll(1, 100)
+  );
+
+  const items = data?.data || [];
+
+  // Calcular valores derivados com useMemo
+  const { totalValue, criticalItems, expiringItems, totalItemsCount } = useMemo(() => {
+    const total = items.reduce((acc: number, item: Item) => 
+      acc + (item.quantidade_atual * item.valor_unitario), 0
+    );
+    
+    const critical = items.filter((item: Item) => 
+      item.quantidade_atual <= item.quantidade_minima
+    );
+    
+    const expiring = items.filter((item: Item) => {
+      if (!item.data_validade) return false;
+      const daysUntilExpiry = Math.ceil(
+        (new Date(item.data_validade).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      );
+      return daysUntilExpiry <= 7 && daysUntilExpiry >= 0;
+    });
+    
+    const count = items.reduce((acc: number, item: Item) => 
+      acc + item.quantidade_atual, 0
+    );
+
+    return { 
+      totalValue: total, 
+      criticalItems: critical, 
+      expiringItems: expiring, 
+      totalItemsCount: count 
+    };
+  }, [items]);
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="space-y-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <Skeleton className="h-9 w-48" />
+              <Skeleton className="h-5 w-64 mt-2" />
+            </div>
+            <Skeleton className="h-11 w-32" />
+          </div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-28 w-full" />
+            ))}
+          </div>
+          <div className="grid gap-6 md:grid-cols-7">
+            <Skeleton className="md:col-span-4 h-80" />
+            <Skeleton className="md:col-span-3 h-80" />
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -52,7 +111,7 @@ export default function Dashboard() {
             <CardHeader className="px-0 pt-0">
               <CardTitle>Tendência de Gastos</CardTitle>
             </CardHeader>
-            <CardContent className="h-[300px] px-0">
+            <CardContent className="h-75 px-0">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                   <defs>
@@ -84,14 +143,14 @@ export default function Dashboard() {
                 {criticalItems.slice(0, 5).map((item) => (
                   <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                     <div className="flex items-center gap-3">
-                      <div className={cn("h-2 w-2 rounded-full animate-pulse", item.quantidadeAtual === 0 ? "bg-red-500" : "bg-orange-500")} />
+                      <div className={cn("h-2 w-2 rounded-full animate-pulse", item.quantidade_atual === 0 ? "bg-red-500" : "bg-orange-500")} />
                       <div>
                         <p className="text-sm font-medium">{item.nome}</p>
                         <p className="text-xs text-muted-foreground">{item.marca}</p>
                       </div>
                     </div>
-                    <div className={cn("text-right font-bold text-sm", item.quantidadeAtual === 0 ? "text-red-500" : "text-orange-500")}>
-                      {item.quantidadeAtual} {item.unidadeMedida}
+                    <div className={cn("text-right font-bold text-sm", item.quantidade_atual === 0 ? "text-red-500" : "text-orange-500")}>
+                      {item.quantidade_atual} {item.unidade_medida}
                     </div>
                   </div>
                 ))}

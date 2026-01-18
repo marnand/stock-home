@@ -1,29 +1,71 @@
 import { Layout } from "@/components/layout";
-import { useInventoryStore } from "@/lib/store";
+import { itemService } from "@/api/service/index.service";
+import { useQuery } from "@/api/hooks";
+import type { Item } from "@/api/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+import { useMemo } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Analytics() {
-  const { items, getTotalValue } = useInventoryStore();
+  // Buscar itens via API
+  const { data, isLoading } = useQuery(
+    ['items'],
+    () => itemService.getAll(1, 100)
+  );
 
-  // Dados por categoria
-  const categoryData = items.reduce((acc: any[], item) => {
-    const existing = acc.find(c => c.name === item.categoria);
-    if (existing) {
-      existing.value += item.quantidadeAtual * item.valorUnitario;
-    } else {
-      acc.push({ name: item.categoria, value: item.quantidadeAtual * item.valorUnitario });
-    }
-    return acc;
-  }, []);
+  const items = data?.data || [];
 
-  // Top 5 itens mais caros no estoque
-  const topItems = [...items]
-    .sort((a, b) => (b.quantidadeAtual * b.valorUnitario) - (a.quantidadeAtual * a.valorUnitario))
-    .slice(0, 5)
-    .map(i => ({ name: i.nome, valor: i.quantidadeAtual * i.valorUnitario }));
+  // Calcular valores derivados com useMemo
+  const { categoryData, topItems, totalValue } = useMemo(() => {
+    // Dados por categoria
+    const catData = items.reduce((acc: { name: string; value: number }[], item: Item) => {
+      const existing = acc.find(c => c.name === item.categoria);
+      if (existing) {
+        existing.value += item.quantidade_atual * item.valor_unitario;
+      } else {
+        acc.push({ name: item.categoria, value: item.quantidade_atual * item.valor_unitario });
+      }
+      return acc;
+    }, []);
+
+    // Top 5 itens mais caros no estoque
+    const top = [...items]
+      .sort((a: Item, b: Item) => (b.quantidade_atual * b.valor_unitario) - (a.quantidade_atual * a.valor_unitario))
+      .slice(0, 5)
+      .map((i: Item) => ({ name: i.nome, valor: i.quantidade_atual * i.valor_unitario }));
+
+    // Valor total
+    const total = items.reduce((acc: number, item: Item) => 
+      acc + (item.quantidade_atual * item.valor_unitario), 0
+    );
+
+    return { categoryData: catData, topItems: top, totalValue: total };
+  }, [items]);
 
   const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="space-y-8">
+          <div>
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="h-5 w-72 mt-2" />
+          </div>
+          <div className="grid gap-6 md:grid-cols-2">
+            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-80 w-full" />
+          </div>
+          <div className="grid gap-6 md:grid-cols-3">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-28 w-full" />
+            ))}
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -39,7 +81,7 @@ export default function Analytics() {
             <CardHeader className="px-0 pt-0">
               <CardTitle>Investimento por Categoria</CardTitle>
             </CardHeader>
-            <CardContent className="h-[300px] px-0">
+            <CardContent className="h-75 px-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -67,7 +109,7 @@ export default function Analytics() {
             <CardHeader className="px-0 pt-0">
               <CardTitle>Top 5 Itens (Maior Valor)</CardTitle>
             </CardHeader>
-            <CardContent className="h-[300px] px-0">
+            <CardContent className="h-75 px-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topItems} layout="vertical">
                   <XAxis type="number" hide />
@@ -85,7 +127,7 @@ export default function Analytics() {
           <Card className="bg-primary/5 border-primary/20">
             <CardContent className="pt-6">
               <p className="text-sm font-medium text-muted-foreground">Valor Total em Estoque</p>
-              <h3 className="text-2xl font-bold mt-2 text-primary">R$ {getTotalValue().toFixed(2)}</h3>
+              <h3 className="text-2xl font-bold mt-2 text-primary">R$ {totalValue.toFixed(2)}</h3>
             </CardContent>
           </Card>
           <Card className="bg-emerald-500/5 border-emerald-500/20">

@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Plus } from "lucide-react";
-import { useInventoryStore } from "@/lib/store";
+import { Plus, Loader2 } from "lucide-react";
+import { useMutation } from "@/api/hooks";
+import type { Item } from "@/api/types";
+import { itemService } from "@/api/service/index.service";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
@@ -16,17 +17,39 @@ const formSchema = z.object({
   nome: z.string().min(2, "Name must be at least 2 characters"),
   marca: z.string().min(2, "Brand is required"),
   categoria: z.string().min(1, "Category is required"),
-  quantidadeAtual: z.coerce.number().min(0),
-  quantidadeMinima: z.coerce.number().min(0),
-  unidadeMedida: z.string().min(1, "Unit is required"),
-  valorUnitario: z.coerce.number().min(0),
-  dataValidade: z.string().optional(),
+  quantidade_atual: z.coerce.number().min(0),
+  quantidade_minima: z.coerce.number().min(0),
+  unidade_medida: z.string().min(1, "Unit is required"),
+  valor_unitario: z.coerce.number().min(0),
+  data_validade: z.string().optional(),
 });
 
 export function AddItemDialog() {
   const [open, setOpen] = useState(false);
-  const addItem = useInventoryStore((state) => state.addItem);
   const { toast } = useToast();
+
+  // Mutation para criar item
+  const createMutation = useMutation<Item, Partial<Item>>(
+    (data) => itemService.create(data),
+    {
+      invalidateQueries: ['items'],
+      onSuccess: () => {
+        setOpen(false);
+        form.reset();
+        toast({
+          title: "Success",
+          description: "Item added to inventory successfully",
+        });
+      },
+      onError: () => {
+        toast({
+          title: "Error",
+          description: "Failed to add item to inventory",
+          variant: "destructive",
+        });
+      },
+    }
+  );
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -34,24 +57,18 @@ export function AddItemDialog() {
       nome: "",
       marca: "",
       categoria: "",
-      quantidadeAtual: 1,
-      quantidadeMinima: 1,
-      unidadeMedida: "un",
-      valorUnitario: 0,
-      dataValidade: "",
+      quantidade_atual: 1,
+      quantidade_minima: 1,
+      unidade_medida: "un",
+      valor_unitario: 0,
+      data_validade: "",
     },
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    addItem({
+    createMutation.mutate({
       ...values,
-      dataUltimaCompra: new Date().toISOString(),
-    });
-    setOpen(false);
-    form.reset();
-    toast({
-      title: "Success",
-      description: "Item added to inventory successfully",
+      data_validade: values.data_validade || undefined,
     });
   }
 
@@ -62,7 +79,7 @@ export function AddItemDialog() {
           <Plus className="mr-2 h-5 w-5" /> Add New Item
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] glass-panel border-white/20">
+      <DialogContent className="sm:max-w-125 glass-panel border-white/20">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">Add Inventory Item</DialogTitle>
           <DialogDescription>
@@ -125,7 +142,7 @@ export function AddItemDialog() {
               />
               <FormField
                 control={form.control}
-                name="quantidadeAtual"
+                name="quantidade_atual"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Current Qty</FormLabel>
@@ -138,7 +155,7 @@ export function AddItemDialog() {
               />
               <FormField
                 control={form.control}
-                name="quantidadeMinima"
+                name="quantidade_minima"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Min Qty</FormLabel>
@@ -151,7 +168,7 @@ export function AddItemDialog() {
               />
               <FormField
                 control={form.control}
-                name="unidadeMedida"
+                name="unidade_medida"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Unit</FormLabel>
@@ -176,7 +193,7 @@ export function AddItemDialog() {
               />
               <FormField
                 control={form.control}
-                name="valorUnitario"
+                name="valor_unitario"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Price per Unit</FormLabel>
@@ -189,7 +206,7 @@ export function AddItemDialog() {
               />
                <FormField
                 control={form.control}
-                name="dataValidade"
+                name="data_validade"
                 render={({ field }) => (
                   <FormItem className="col-span-2">
                     <FormLabel>Expiry Date (Optional)</FormLabel>
@@ -202,7 +219,20 @@ export function AddItemDialog() {
               />
             </div>
             <DialogFooter className="mt-6">
-              <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">Save Item</Button>
+              <Button 
+                type="submit" 
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Item"
+                )}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

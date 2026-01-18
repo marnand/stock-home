@@ -1,40 +1,91 @@
 import { useState } from "react";
 import { Layout } from "@/components/layout";
-import { useInventoryStore } from "@/lib/store";
-import { ShoppingBasket, Check, Trash2, AlertTriangle, Plus } from "lucide-react";
+import { itemService } from "@/api/service/index.service";
+import { useQuery, useMutation } from "@/api/hooks";
+import type { Item } from "@/api/types";
+import { ShoppingBasket, Check, AlertTriangle, Plus, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ItemDialog } from "@/components/item-dialog";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ShoppingList() {
-  const { items, updateItem } = useInventoryStore();
+  const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
-  const shoppingItems = items.filter(item => item.quantidadeAtual <= item.quantidadeMinima);
-  
-  const [checkedItems, setCheckedItems] = useState<number[]>([]);
+  const [checkedItems, setCheckedItems] = useState<(number | string)[]>([]);
 
-  const toggleItem = (id: number) => {
+  // Buscar itens via API
+  const { data, isLoading } = useQuery(
+    ['items'],
+    () => itemService.getAll(1, 100)
+  );
+
+  const items = data?.data.data || [];
+  const shoppingItems = items.filter((item: Item) => item.quantidade_atual <= item.quantidade_minima);
+
+  // Mutation para atualizar item (marcar como comprado)
+  const updateMutation = useMutation<Item, { id: number | string; data: Partial<Item> }>(
+    ({ id, data }) => itemService.update(id, data),
+    {
+      invalidateQueries: ['items'],
+      onSuccess: () => {
+        toast({ title: "Sucesso", description: "Itens atualizados!" });
+      },
+      onError: () => {
+        toast({ title: "Erro", description: "Falha ao atualizar itens", variant: "destructive" });
+      },
+    }
+  );
+
+  const toggleItem = (id: number | string) => {
     setCheckedItems(prev => 
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
 
-  const handleFinishShopping = () => {
-    checkedItems.forEach(id => {
-      const item = items.find(i => i.id === id);
+  const handleFinishShopping = async () => {
+    for (const id of checkedItems) {
+      const item = items.find((i: Item) => i.id === id);
       if (item) {
-        updateItem(id, { 
-          quantidadeAtual: item.quantidadeMinima * 2,
-          dataUltimaCompra: new Date().toISOString()
+        await updateMutation.mutateAsync({
+          id,
+          data: { 
+            quantidade_atual: item.quantidade_minima * 2,
+            data_ultima_compra: new Date().toISOString()
+          }
         });
       }
-    });
+    }
     setCheckedItems([]);
   };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="space-y-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <Skeleton className="h-9 w-56" />
+              <Skeleton className="h-5 w-80 mt-2" />
+            </div>
+            <div className="flex gap-3">
+              <Skeleton className="h-10 w-36" />
+              <Skeleton className="h-10 w-48" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <Skeleton key={i} className="h-48 w-full" />
+            ))}
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -49,11 +100,16 @@ export default function ShoppingList() {
               <Plus className="h-4 w-4" /> Cadastrar Novo
             </Button>
             <Button 
-              disabled={checkedItems.length === 0}
+              disabled={checkedItems.length === 0 || updateMutation.isPending}
               onClick={handleFinishShopping}
               className="gap-2"
             >
-              <Check className="h-4 w-4" /> Marcar como Comprado ({checkedItems.length})
+              {updateMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              Marcar como Comprado ({checkedItems.length})
             </Button>
           </div>
         </div>
@@ -75,7 +131,7 @@ export default function ShoppingList() {
               {shoppingItems.map((item) => (
                 <Card key={item.id} className={cn(
                   "relative overflow-hidden transition-all border-l-4",
-                  item.quantidadeAtual === 0 ? "border-l-red-500" : "border-l-orange-500",
+                  item.quantidade_atual === 0 ? "border-l-red-500" : "border-l-orange-500",
                   checkedItems.includes(item.id) ? "opacity-60 bg-muted/50" : "hover:shadow-md"
                 )}>
                   <CardHeader className="pb-2 flex flex-row items-start justify-between">
@@ -92,7 +148,7 @@ export default function ShoppingList() {
                   <CardContent>
                     <div className="flex items-center gap-2 mb-4">
                       <Badge variant="secondary">{item.categoria}</Badge>
-                      {item.quantidadeAtual === 0 && (
+                      {item.quantidade_atual === 0 && (
                         <Badge className="bg-red-500 hover:bg-red-600">Esgotado</Badge>
                       )}
                     </div>
@@ -102,15 +158,15 @@ export default function ShoppingList() {
                         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Status</p>
                         <div className={cn(
                           "flex items-center gap-1 text-sm font-medium",
-                          item.quantidadeAtual === 0 ? "text-red-600" : "text-orange-600"
+                          item.quantidade_atual === 0 ? "text-red-600" : "text-orange-600"
                         )}>
                           <AlertTriangle className="h-3 w-3" />
-                          {item.quantidadeAtual} / {item.quantidadeMinima} {item.unidadeMedida}
+                          {item.quantidade_atual} / {item.quantidade_minima} {item.unidade_medida}
                         </div>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">Preço Unit.</p>
-                        <p className="font-bold">R$ {item.valorUnitario.toFixed(2)}</p>
+                        <p className="font-bold">R$ {item.valor_unitario.toFixed(2)}</p>
                       </div>
                     </div>
                   </CardContent>

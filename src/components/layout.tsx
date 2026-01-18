@@ -1,8 +1,9 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Package, ShoppingCart, BarChart3, Settings, Bell, Search, User, LogOut, Sun, Moon, Menu, X } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, BarChart3, LogOut, Sun, Moon, Menu, Search, User, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
-import { useInventoryStore } from "@/lib/store";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
@@ -13,7 +14,8 @@ const NAV_ITEMS = [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
-  const { user, logout } = useInventoryStore();
+  const { user, isAuthenticated, logout } = useAuth();
+  const { toast } = useToast();
   
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -22,12 +24,31 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return false;
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      toast({
+        title: "Até logo!",
+        description: "Você foi desconectado com sucesso.",
+      });
+      setLocation("/login");
+    } catch {
+      // Em caso de erro, ainda redireciona
+      setLocation("/login");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   useEffect(() => {
-    if (!user && location !== "/auth") {
-      setLocation("/auth");
+    const token = localStorage.getItem('auth_token');
+    if (!isAuthenticated && !token && location !== "/auth" && location !== "/login" && location !== "/register") {
+      setLocation("/login");
     }
-  }, [user, location, setLocation]);
+  }, [isAuthenticated, location, setLocation]);
 
   useEffect(() => {
     if (isDark) {
@@ -39,11 +60,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   }, [isDark]);
 
-  if (!user && location === "/auth") {
+  // Verifica se está em rota de autenticação
+  const isAuthRoute = location === "/auth" || location === "/login" || location === "/register";
+
+  if (!isAuthenticated && isAuthRoute) {
     return <>{children}</>;
   }
 
-  if (!user) return null;
+  if (!isAuthenticated) return null;
 
   return (
     <div className="flex min-h-screen w-full bg-background font-sans text-foreground transition-all duration-300">
@@ -92,11 +116,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
               {isSidebarOpen && <span className="animate-in fade-in slide-in-from-left-2">{isDark ? "Modo Claro" : "Modo Escuro"}</span>}
             </button>
             <button 
-              onClick={() => logout()}
-              className="flex w-full items-center gap-3 py-3 text-sm font-medium text-gray-400 hover:text-red-400 transition-colors"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="flex w-full items-center gap-3 py-3 text-sm font-medium text-gray-400 hover:text-red-400 transition-colors disabled:opacity-50"
             >
-              <LogOut className="h-5 w-5 shrink-0" />
-              {isSidebarOpen && <span className="animate-in fade-in slide-in-from-left-2">Sair</span>}
+              {isLoggingOut ? (
+                <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
+              ) : (
+                <LogOut className="h-5 w-5 shrink-0" />
+              )}
+              {isSidebarOpen && (
+                <span className="animate-in fade-in slide-in-from-left-2">
+                  {isLoggingOut ? "Saindo..." : "Sair"}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -138,7 +171,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <div className="px-8 pb-8 max-w-[1400px] mx-auto">
+        <div className="px-8 pb-8 max-w-350 mx-auto">
           {children}
         </div>
       </main>

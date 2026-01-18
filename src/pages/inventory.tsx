@@ -1,20 +1,50 @@
 import { useState } from "react";
 import { Layout } from "@/components/layout";
-import { useInventoryStore, Item } from "@/lib/store";
+import { useQuery, useMutation } from "@/api/hooks";
+import type { Item } from "@/api/types";
 import { ItemDialog } from "@/components/item-dialog";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, Trash2, Edit, Plus } from "lucide-react";
+import { Search, Trash2, Edit, Plus, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import { itemService } from "@/api/service/index.service";
 
 export default function Inventory() {
-  const { items, deleteItem } = useInventoryStore();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [editingItem, setEditingItem] = useState<Item | undefined>(undefined);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // Buscar itens via API
+  const { data, isLoading, refetch } = useQuery(
+    ['items'],
+    () => itemService.getAll(1, 100)
+  );
+
+  const items = data?.data || [];
+
+  // Mutation para deletar item
+  const deleteMutation = useMutation<void, number | string>(
+    (id) => itemService.delete(id),
+    {
+      invalidateQueries: ['items'],
+      onSuccess: () => {
+        toast({ title: "Sucesso", description: "Item removido com sucesso" });
+      },
+      onError: () => {
+        toast({ title: "Erro", description: "Falha ao remover item", variant: "destructive" });
+      },
+    }
+  );
+
+  const handleDelete = (id: number | string) => {
+    deleteMutation.mutate(id);
+  };
 
   const filteredItems = items.filter((item) => {
     const matchesSearch = item.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -24,16 +54,43 @@ export default function Inventory() {
   });
 
   const getStatusColor = (item: Item) => {
-    if (item.quantidadeAtual === 0) return "bg-red-500/10 text-red-600 border-red-200";
-    if (item.quantidadeAtual <= item.quantidadeMinima) return "bg-orange-500/10 text-orange-600 border-orange-200";
+    if (item.quantidade_atual === 0) return "bg-red-500/10 text-red-600 border-red-200";
+    if (item.quantidade_atual <= item.quantidade_minima) return "bg-orange-500/10 text-orange-600 border-orange-200";
     return "bg-green-500/10 text-green-600 border-green-200";
   };
 
   const getStatusText = (item: Item) => {
-    if (item.quantidadeAtual === 0) return "Esgotado";
-    if (item.quantidadeAtual <= item.quantidadeMinima) return "Crítico";
+    if (item.quantidade_atual === 0) return "Esgotado";
+    if (item.quantidade_atual <= item.quantidade_minima) return "Crítico";
     return "OK";
   };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="space-y-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <Skeleton className="h-9 w-48" />
+              <Skeleton className="h-5 w-72 mt-2" />
+            </div>
+            <Skeleton className="h-10 w-36" />
+          </div>
+          <div className="bg-card rounded-xl p-6 border shadow-sm">
+            <div className="flex flex-col md:flex-row gap-4 mb-6">
+              <Skeleton className="h-10 flex-1" />
+              <Skeleton className="h-10 w-50" />
+            </div>
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -47,7 +104,7 @@ export default function Inventory() {
             <Plus className="h-5 w-5" /> Adicionar Item
           </Button>
         </div>
-
+        
         <div className="bg-card rounded-xl p-6 border shadow-sm">
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <div className="relative flex-1">
@@ -59,7 +116,7 @@ export default function Inventory() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="w-full md:w-[200px]">
+            <div className="w-full md:w-50">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="h-10">
                   <SelectValue placeholder="Categoria" />
@@ -107,16 +164,26 @@ export default function Inventory() {
                       <TableCell>
                         <Badge variant="outline" className={getStatusColor(item)}>{getStatusText(item)}</Badge>
                       </TableCell>
-                      <TableCell className="font-medium">{item.quantidadeAtual} {item.unidadeMedida}</TableCell>
-                      <TableCell>R$ {item.valorUnitario.toFixed(2)}</TableCell>
-                      <TableCell className="font-bold">R$ {(item.quantidadeAtual * item.valorUnitario).toFixed(2)}</TableCell>
+                      <TableCell className="font-medium">{item.quantidade_atual} {item.unidade_medida}</TableCell>
+                      <TableCell>R$ {item.valor_unitario.toFixed(2)}</TableCell>
+                      <TableCell className="font-bold">R$ {(item.quantidade_atual * item.valor_unitario).toFixed(2)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="icon" onClick={() => { setEditingItem(item); setIsDialogOpen(true); }}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="hover:text-red-600" onClick={() => deleteItem(item.id)}>
-                            <Trash2 className="h-4 w-4" />
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="hover:text-red-600" 
+                            onClick={() => handleDelete(item.id)}
+                            disabled={deleteMutation.isPending}
+                          >
+                            {deleteMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                       </TableCell>

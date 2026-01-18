@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Plus } from "lucide-react";
-import { useInventoryStore, Item } from "@/lib/store";
+import { Loader2 } from "lucide-react";
+import { useMutation } from "@/api/hooks";
+import type { Item } from "@/api/types";
+import { itemService } from "@/api/service/index.service";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,11 +17,11 @@ const formSchema = z.object({
   nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   marca: z.string().min(1, "Marca é obrigatória"),
   categoria: z.string().min(1, "Categoria é obrigatória"),
-  quantidadeAtual: z.coerce.number().min(0),
-  quantidadeMinima: z.coerce.number().min(0),
-  unidadeMedida: z.string().min(1, "Unidade é obrigatória"),
-  valorUnitario: z.coerce.number().min(0),
-  dataValidade: z.string().optional(),
+  quantidade_atual: z.coerce.number().min(0),
+  quantidade_minima: z.coerce.number().min(0),
+  unidade_medida: z.string().min(1, "Unidade é obrigatória"),
+  valor_unitario: z.coerce.number().min(0),
+  data_validade: z.string().optional(),
 });
 
 interface ItemDialogProps {
@@ -34,8 +36,39 @@ export function ItemDialog({ item, trigger, open: controlledOpen, onOpenChange: 
   const open = controlledOpen ?? internalOpen;
   const setOpen = setControlledOpen ?? setInternalOpen;
   
-  const { addItem, updateItem } = useInventoryStore();
   const { toast } = useToast();
+
+  // Mutation para criar item
+  const createMutation = useMutation<Item, Partial<Item>>(
+    (data) => itemService.create(data),
+    {
+      invalidateQueries: ['items'],
+      onSuccess: () => {
+        toast({ title: "Sucesso", description: "Item adicionado ao inventário" });
+        setOpen(false);
+      },
+      onError: () => {
+        toast({ title: "Erro", description: "Falha ao adicionar item", variant: "destructive" });
+      },
+    }
+  );
+
+  // Mutation para atualizar item
+  const updateMutation = useMutation<Item, { id: number | string; data: Partial<Item> }>(
+    ({ id, data }) => itemService.update(id, data),
+    {
+      invalidateQueries: ['items'],
+      onSuccess: () => {
+        toast({ title: "Sucesso", description: "Item atualizado com sucesso" });
+        setOpen(false);
+      },
+      onError: () => {
+        toast({ title: "Erro", description: "Falha ao atualizar item", variant: "destructive" });
+      },
+    }
+  );
+
+  const isLoading = createMutation.isPending || updateMutation.isPending;
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -43,11 +76,11 @@ export function ItemDialog({ item, trigger, open: controlledOpen, onOpenChange: 
       nome: "",
       marca: "",
       categoria: "",
-      quantidadeAtual: 0,
-      quantidadeMinima: 1,
-      unidadeMedida: "un",
-      valorUnitario: 0,
-      dataValidade: "",
+      quantidade_atual: 0,
+      quantidade_minima: 1,
+      unidade_medida: "un",
+      valor_unitario: 0,
+      data_validade: "",
     },
   });
 
@@ -57,41 +90,41 @@ export function ItemDialog({ item, trigger, open: controlledOpen, onOpenChange: 
         nome: item.nome,
         marca: item.marca,
         categoria: item.categoria,
-        quantidadeAtual: item.quantidadeAtual,
-        quantidadeMinima: item.quantidadeMinima,
-        unidadeMedida: item.unidadeMedida,
-        valorUnitario: item.valorUnitario,
-        dataValidade: item.dataValidade || "",
+        quantidade_atual: item.quantidade_atual,
+        quantidade_minima: item.quantidade_minima,
+        unidade_medida: item.unidade_medida,
+        valor_unitario: item.valor_unitario,
+        data_validade: item.data_validade || "",
       });
     } else if (!item && open) {
       form.reset({
         nome: "",
         marca: "",
         categoria: "",
-        quantidadeAtual: 1,
-        quantidadeMinima: 1,
-        unidadeMedida: "un",
-        valorUnitario: 0,
-        dataValidade: "",
+        quantidade_atual: 1,
+        quantidade_minima: 1,
+        unidade_medida: "un",
+        valor_unitario: 0,
+        data_validade: "",
       });
     }
   }, [item, open, form]);
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     if (item) {
-      updateItem(item.id, values);
-      toast({ title: "Sucesso", description: "Item atualizado com sucesso" });
+      updateMutation.mutate({ id: item.id, data: values });
     } else {
-      addItem({ ...values, dataUltimaCompra: new Date().toISOString() });
-      toast({ title: "Sucesso", description: "Item adicionado ao inventário" });
+      createMutation.mutate({ 
+        ...values, 
+        data_validade: values.data_validade || undefined 
+      });
     }
-    setOpen(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-125">
         <DialogHeader>
           <DialogTitle>{item ? "Editar Item" : "Adicionar Novo Item"}</DialogTitle>
           <DialogDescription>
@@ -146,7 +179,7 @@ export function ItemDialog({ item, trigger, open: controlledOpen, onOpenChange: 
               />
               <FormField
                 control={form.control}
-                name="quantidadeAtual"
+                name="quantidade_atual"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Qtd Atual</FormLabel>
@@ -157,7 +190,7 @@ export function ItemDialog({ item, trigger, open: controlledOpen, onOpenChange: 
               />
               <FormField
                 control={form.control}
-                name="quantidadeMinima"
+                name="quantidade_minima"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Qtd Mínima</FormLabel>
@@ -168,7 +201,7 @@ export function ItemDialog({ item, trigger, open: controlledOpen, onOpenChange: 
               />
               <FormField
                 control={form.control}
-                name="unidadeMedida"
+                name="unidade_medida"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Unidade</FormLabel>
@@ -188,7 +221,7 @@ export function ItemDialog({ item, trigger, open: controlledOpen, onOpenChange: 
               />
               <FormField
                 control={form.control}
-                name="valorUnitario"
+                name="valor_unitario"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Preço Unit.</FormLabel>
@@ -199,7 +232,7 @@ export function ItemDialog({ item, trigger, open: controlledOpen, onOpenChange: 
               />
                <FormField
                 control={form.control}
-                name="dataValidade"
+                name="data_validade"
                 render={({ field }) => (
                   <FormItem className="col-span-2">
                     <FormLabel>Validade (Opcional)</FormLabel>
@@ -210,7 +243,16 @@ export function ItemDialog({ item, trigger, open: controlledOpen, onOpenChange: 
               />
             </div>
             <DialogFooter className="mt-6">
-              <Button type="submit" className="w-full">{item ? "Atualizar" : "Salvar"}</Button>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {item ? "Atualizando..." : "Salvando..."}
+                  </>
+                ) : (
+                  item ? "Atualizar" : "Salvar"
+                )}
+              </Button>
             </DialogFooter>
           </form>
         </Form>
