@@ -24,7 +24,7 @@ export default function ShoppingList() {
     () => itemService.getAll(1, 100)
   );
 
-  const items = data?.data.data || [];
+  const items = data?.data || [];
   const shoppingItems = items.filter((item: Item) => item.quantidade_atual <= item.quantidade_minima);
 
   // Mutation para atualizar item (marcar como comprado)
